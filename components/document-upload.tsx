@@ -3,14 +3,22 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Upload, File, X, Sparkles } from "lucide-react"
+import { useSWRConfig } from "swr"
+
+import { Upload, File, X, Sparkles, Loader2 } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { DOCUMENTS_API_PATH } from "@/lib/constants"
+import { useToast } from "@/hooks/use-toast"
 
 export function DocumentUpload() {
   const [isDragging, setIsDragging] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const { mutate } = useSWRConfig()
+  const { toast } = useToast()
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -39,8 +47,48 @@ export function DocumentUpload() {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleUpload = () => {
-    alert(`Would upload ${selectedFiles.length} file(s)`)
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0 || isUploading) {
+      return
+    }
+
+    setIsUploading(true)
+    try {
+      const payload = {
+        documents: selectedFiles.map((file) => ({
+          name: file.name,
+          size: file.size,
+          type: file.type || "application/octet-stream",
+          storageKey: createStorageKey(file.name),
+        })),
+      }
+
+      const response = await fetch(DOCUMENTS_API_PATH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw new Error("Upload failed")
+      }
+
+      toast({
+        title: "Upload queued",
+        description: `Added ${selectedFiles.length} ${selectedFiles.length === 1 ? "document" : "documents"} to the queue.`,
+      })
+      setSelectedFiles([])
+      mutate(DOCUMENTS_API_PATH)
+    } catch (error) {
+      console.error(error)
+      toast({
+        title: "Upload failed",
+        description: "We could not upload your documents. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   return (
@@ -140,9 +188,10 @@ export function DocumentUpload() {
                 className="w-full bg-gradient-to-r from-accent to-primary text-base shadow-lg shadow-accent/20"
                 size="lg"
                 onClick={handleUpload}
+                disabled={isUploading}
               >
-                <Upload className="mr-2 h-5 w-5" />
-                Upload {selectedFiles.length} {selectedFiles.length === 1 ? "File" : "Files"}
+                {isUploading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Upload className="mr-2 h-5 w-5" />}
+                {isUploading ? "Uploading..." : `Upload ${selectedFiles.length} ${selectedFiles.length === 1 ? "File" : "Files"}`}
               </Button>
             </div>
           )}
@@ -150,4 +199,9 @@ export function DocumentUpload() {
       </CardContent>
     </Card>
   )
+}
+
+const createStorageKey = (filename: string) => {
+  const uniqueSuffix = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Date.now().toString(36)
+  return `${uniqueSuffix}-${filename}`
 }

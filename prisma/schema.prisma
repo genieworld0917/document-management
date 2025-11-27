@@ -1,0 +1,73 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DocumentStatus {
+  UPLOADING
+  ANALYZING
+  ANALYZED
+  FAILED
+}
+
+model Document {
+  id          String            @id @default(cuid())
+  filename    String
+  mimeType    String
+  sizeBytes   Int
+  content     String?
+  storageKey  String?
+  status      DocumentStatus    @default(UPLOADING)
+  uploadedAt  DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  analyses    DocumentAnalysis[]
+  chunks      DocumentChunk[]
+}
+
+model DocumentAnalysis {
+  id                  String         @id @default(cuid())
+  documentId          String
+  summary             String?
+  wordCount           Int?
+  pageCount           Int?
+  readingTime         String?
+  readability         Int?
+  language            String?
+  sentimentPositive   Int?
+  sentimentNeutral    Int?
+  sentimentNegative   Int?
+  keyTopics           String[]       @default([])
+  entities            String[]       @default([])
+  vectorId            String?
+  analysisModel       String?
+  embeddingModel      String?
+  promptTokens        Int?
+  completionTokens    Int?
+  createdAt           DateTime       @default(now())
+  document            Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
+
+model DocumentChunk {
+  id         String   @id @default(cuid())
+  documentId String
+  chunkIndex Int
+  content    String
+  vectorId   String?
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@unique([documentId, chunkIndex])
+}
